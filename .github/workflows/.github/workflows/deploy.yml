@@ -1,0 +1,221 @@
+name: Deploy (Prebuilt)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Pull Vercel env
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Create prebuilt output
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy prebuilt output
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+{
+  "scripts": {
+    "build": "tsc && node scripts/build-vercel-output.js",
+    "dev": "tsx src/app.ts"
+  }
+}
+--rapyard-backend-spendshield-core/
+│
+├── src/
+│   ├── app.ts
+│   └── routes/
+│       └── health.ts
+│
+├── dist/                     # created by tsc
+│   └── app.js
+│
+├── scripts/
+│   ├── build-vercel-output.js
+│   └── vercel-hono-adapter.js
+│
+├── .github/
+│   └── workflows/
+│       └── main.yml
+│
+├── package.json
+├── tsconfig.json
+└── README.md
+{
+  "name": "spendshield-core",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/app.ts",
+    "build": "tsc && node scripts/build-vercel-output.js"
+  },
+  "dependencies": {
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ES2020",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "rootDir": "src",
+    "esModuleInterop": true,
+    "strict": true
+  },
+  "include": ["src"]
+}
+import { Hono } from 'hono'
+import health from './routes/health'
+
+const app = new Hono()
+
+app.route('/api', health)
+
+export default app
+import { Hono } from 'hono'
+
+const health = new Hono()
+
+health.get('/health', c => c.json({ ok: true, service: 'spendshield-core' }))
+
+export default health
+import app from '../dist/app.js'
+
+export default async function handler(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host}`)
+
+  const honoReq = new Request(url.toString(), {
+    method: req.method,
+    headers: req.headers,
+    body: ['GET', 'HEAD'].includes(req.method) ? undefined : req
+  })
+
+  const honoRes = await app.fetch(honoReq)
+
+  res.statusCode = honoRes.status
+  honoRes.headers.forEach((v, k) => res.setHeader(k, v))
+
+  const buf = Buffer.from(await honoRes.arrayBuffer())
+  res.end(buf)
+}
+import fs from 'fs'
+import path from 'path'
+
+const root = process.cwd()
+const out = path.join(root, '.vercel/output')
+
+// Clean old output
+fs.rmSync(out, { recursive: true, force: true })
+
+// Recreate structure
+fs.mkdirSync(path.join(out, 'functions/api/index.func'), { recursive: true })
+fs.mkdirSync(path.join(out, 'static'), { recursive: true })
+
+// Write config.json
+fs.writeFileSync(
+  path.join(out, 'config.json'),
+  JSON.stringify(
+    {
+      version: 3,
+      routes: [
+        { src: "/api/(.*)", dest: "functions/api/index.func" },
+        { src: "/(.*)", dest: "/static/$1" }
+      ]
+    },
+    null,
+    2
+  )
+)
+
+// Write .vc-config.json
+fs.writeFileSync(
+  path.join(out, 'functions/api/index.func/.vc-config.json'),
+  JSON.stringify(
+    {
+      runtime: "nodejs20.x",
+      handler: "index.js",
+      launcherType: "Nodejs",
+      regions: ["iad1"]
+    },
+    null,
+    2
+  )
+)
+
+// Copy adapter
+fs.copyFileSync(
+  path.join(root, 'scripts/vercel-hono-adapter.js'),
+  path.join(out, 'functions/api/index.func/index.js')
+)
+
+console.log("✔ Built .vercel/output for Vercel prebuilt deploy")
+name: Deploy (Prebuilt)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Pull Vercel env
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Create prebuilt output
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy prebuilt output
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+# SpendShield Core Backend
+
+Hono-based backend for SpendShield, deployed via Vercel using a CI‑first,
+prebuilt-output workflow.
+
+## Commands
+
+- `npm run dev` — local development
+- `npm run build` — compile TypeScript + generate `.vercel/output`
+- CI deploys automatically on push to `main`
+
+## Architecture
+
+- Hono for routing
+- Node runtime on Vercel
+- Deterministic `.vercel/output` bundle
+- Zero Vercel drift
+
+
