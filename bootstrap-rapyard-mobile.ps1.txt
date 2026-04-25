@@ -1,0 +1,40 @@
+# BOOTSTRAP — RapYard Mobile
+# Creates deterministic folder structure
+
+$root = "C:\dev\rapyard-mobile\myapp-main"
+
+Write-Host "Creating RapYard mobile structure at $root..."
+
+$folders = @(
+    "app",
+    "app/screens/Auth",
+    "app/screens/Home",
+    "app/screens/Upload",
+    "app/screens/Profile",
+    "app/screens/Settings",
+    "app/components/ui",
+    "app/components/layout",
+    "app/components/media",
+    "app/navigation",
+    "app/hooks",
+    "app/services/api",
+    "app/services/auth",
+    "app/services/storage",
+    "app/services/audio",
+    "app/context",
+    "app/assets/images",
+    "app/assets/fonts",
+    "app/assets/icons",
+    "app/styles",
+    "app/utils",
+    "config",
+    "scripts"
+)
+
+foreach ($folder in $folders) {
+    $path = Join-Path $root $folder
+    New-Item -ItemType Directory -Force -Path $path | Out-Null
+    Write-Host "Created: $folder"
+}
+
+Write-Host "Bootstrap complete. RapYard mobile structure ready."
